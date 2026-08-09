@@ -143,6 +143,25 @@ class StressTestingMethod(QuantMethod):
                 shocks[sec] = shock
             scenario_label = f"Uniform shock: {shock*100:.1f}%"
 
+        # A security cannot lose more than 100% of its value — but a
+        # beta-scaled historical shock (shock_i = beta_i * benchmark_shock)
+        # has no such floor built in, and a high-beta name easily produces
+        # beta > 100/56.8 ≈ 1.76 under the 2008 scenario, giving a shock
+        # below -100% and a NEGATIVE "shocked price", which is meaningless.
+        # Custom per-security shocks (free-text) have the same problem if
+        # someone types e.g. "-150". Clip every shock at -100% and flag which
+        # securities hit that floor, since it signals the linear model has
+        # broken down for that name under this shock rather than silently
+        # showing an impossible number.
+        clipped = [sec for sec, s in shocks.items() if s < -1.0]
+        if clipped:
+            shocks = {sec: max(s, -1.0) for sec, s in shocks.items()}
+            warnings.append(
+                f"{', '.join(clipped)} had an implied shock beyond -100% (a security can't lose more than its "
+                "full value) — capped at -100%. This usually means a high beta relative to the benchmark shock; "
+                "treat these estimates as a lower bound, not precise."
+            )
+
         # weights: from mapped weight data if available (long format), else equal-weight
         weights = {sec: 1.0 / len(securities) for sec in securities}
         if "weight" in role_map.values():
@@ -177,16 +196,32 @@ class StressTestingMethod(QuantMethod):
 
         rows_sorted = sorted(rows, key=lambda r: r["Contribution to Portfolio Return (%)"])
 
+        # A bar per security is fine for a handful of names but an unreadable
+        # wall of overlapping x-axis labels past ~20 (an 81-security stress
+        # test, for instance) — show only the worst/best N contributors on the
+        # chart itself past that threshold; every security's full numbers
+        # remain in series_csv_rows/the table regardless.
+        MAX_BARS = 20
+        many_securities = len(rows_sorted) > MAX_BARS
+        if many_securities:
+            n_each = MAX_BARS // 2
+            chart_rows = rows_sorted[:n_each] + rows_sorted[-n_each:]
+        else:
+            chart_rows = rows_sorted
+
         fig = go.Figure()
         fig.add_trace(go.Bar(
-            x=[r["Security"] for r in rows_sorted], y=[r["Contribution to Portfolio Return (%)"] for r in rows_sorted],
-            marker_color=["#dc2626" if v < 0 else "#059669" for v in [r["Contribution to Portfolio Return (%)"] for r in rows_sorted]],
+            x=[r["Security"] for r in chart_rows], y=[r["Contribution to Portfolio Return (%)"] for r in chart_rows],
+            marker_color=["#dc2626" if v < 0 else "#059669" for v in [r["Contribution to Portfolio Return (%)"] for r in chart_rows]],
             name="Contribution to portfolio return",
         ))
+        subtitle = f"Portfolio impact: {portfolio_impact*100:.2f}%"
+        if many_securities:
+            subtitle += f" — showing the {n_each} best/worst of {len(rows_sorted)} securities; full breakdown in the table below"
         apply_theme(fig, preset=params.get("theme", "professional"),
-                    title=f"Stress Test: {scenario_label}",
-                    subtitle=f"Portfolio impact: {portfolio_impact*100:.2f}%",
+                    title=f"Stress Test: {scenario_label}", subtitle=subtitle,
                     x_title="Security", y_title="Contribution to Portfolio Return (%)")
+        fig.update_xaxes(tickangle=-45 if many_securities else 0)
 
         stats = {
             "Scenario": scenario_label,

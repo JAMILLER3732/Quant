@@ -13,6 +13,7 @@ from app.data.column_detection import guess_columns, guess_structure
 from app.data.ingestion import IngestionError, ingest_file
 from app.data.reshape import ReshapeError, price_panel
 from app.data.validation import run_validation
+from app.quant.portfolio import PORTFOLIO_LABEL
 from app.quant.registry import REGISTRY, get_method, list_methods
 from app.reports.ai_client import is_configured as ai_is_configured
 from app.reports.ai_client import model_name as ai_model_name
@@ -158,6 +159,11 @@ def method_requirements(dataset_id: str, method_id: str) -> dict[str, Any]:
     try:
         panel, _ = price_panel(session.df, session.role_map)
         security_options = list(panel.columns)
+        # Offer "analyze the whole portfolio" alongside individual holdings for
+        # every method with a single-security selector, whenever there's more
+        # than one holding to blend — see portfolio.resolve_security_series().
+        if len(security_options) >= 2:
+            security_options = [PORTFOLIO_LABEL, *security_options]
     except ReshapeError:
         pass
 

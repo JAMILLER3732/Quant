@@ -47,6 +47,22 @@ def apply_theme(
     if subtitle:
         full_title = f"{title}<br><span style='font-size:0.75em;color:{theme['font']}99'>{subtitle}</span>"
 
+    # A subtitle makes the title block two lines instead of one — the fixed
+    # single-line top margin (70px) isn't tall enough for that second line,
+    # so the plot area's top edge/gridlines crept up into the subtitle text.
+    # Scale the margin with subtitle length as a rough proxy for how many
+    # lines it'll wrap to at this font size (long subtitles, e.g. ones
+    # listing several security names, wrap to 2-3 lines on a typical chart
+    # width). Callers with unusual layouts can still override margin after
+    # calling this.
+    if subtitle:
+        wrapped_lines = 1 + len(subtitle) // 70
+        top_margin = 70 + 22 * wrapped_lines
+    elif title:
+        top_margin = 70
+    else:
+        top_margin = 30
+
     fig.update_layout(
         template=None,
         paper_bgcolor=theme["bg"],
@@ -54,7 +70,7 @@ def apply_theme(
         font=dict(color=theme["font"], size=font_size, family="Inter, -apple-system, Helvetica, Arial, sans-serif"),
         title=dict(text=full_title, x=0.02, xanchor="left", font=dict(size=font_size + 5)),
         legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0, bgcolor="rgba(0,0,0,0)"),
-        margin=dict(l=60, r=30, t=70 if title else 30, b=50),
+        margin=dict(l=60, r=30, t=top_margin, b=50),
         height=height,
         hovermode="x unified",
         colorway=theme["palette"],

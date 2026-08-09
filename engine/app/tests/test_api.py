@@ -106,7 +106,9 @@ def test_requirements_satisfied_after_mapping(mapped_dataset_id):
     assert resp.status_code == 200
     body = resp.json()
     assert body["satisfied"] is True
-    assert set(body["dynamic_param_options"]["security"]) == {"AAPL", "MSFT", "SPY"}
+    # individual holdings plus the "whole portfolio" blended option (>= 2 securities mapped)
+    from app.quant.portfolio import PORTFOLIO_LABEL
+    assert set(body["dynamic_param_options"]["security"]) == {"AAPL", "MSFT", "SPY", PORTFOLIO_LABEL}
 
 
 def test_requirements_satisfied_by_wide_format_auto_mapping():

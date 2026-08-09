@@ -147,8 +147,6 @@ class PerformanceDashboardMethod(QuantMethod):
         apply_theme(equity_fig, preset=params.get("theme", "professional"),
                     title=title, subtitle=subtitle, x_title="Date", y_title="Portfolio Value ($)",
                     height=520 if many_securities else 480)
-        if many_securities:
-            equity_fig.update_layout(margin=dict(l=60, r=30, t=95, b=50))
 
         scatter_fig = go.Figure()
         label_text = [s if (not many_securities or s in highlighted) else "" for s in scatter_labels]

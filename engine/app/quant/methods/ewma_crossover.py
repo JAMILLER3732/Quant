@@ -10,6 +10,7 @@ from app.data.reshape import price_panel
 from app.quant import calc
 from app.quant.base import MethodResult, ParamSpec, QuantMethod, RequiredInput
 from app.quant.chart_theme import apply_theme
+from app.quant.portfolio import resolve_security_series
 
 
 class EwmaCrossoverMethod(QuantMethod):
@@ -76,10 +77,7 @@ class EwmaCrossoverMethod(QuantMethod):
         panel, price_role_used = price_panel(df, role_map)
         warnings: list[str] = []
 
-        security = params.get("security") or panel.columns[0]
-        if security not in panel.columns:
-            security = panel.columns[0]
-        prices = panel[security].dropna()
+        prices, security = resolve_security_series(panel, params.get("security"))
 
         fast_span = int(params.get("fast_span", 12))
         slow_span = int(params.get("slow_span", 48))

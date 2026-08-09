@@ -11,6 +11,7 @@ from app.data.reshape import price_panel
 from app.quant import calc
 from app.quant.base import MethodResult, ParamSpec, QuantMethod, RequiredInput
 from app.quant.chart_theme import apply_theme
+from app.quant.portfolio import resolve_security_series
 
 MAX_MC_SIMS = 50000
 
@@ -75,10 +76,7 @@ class VarCvarMethod(QuantMethod):
 
     def calculate(self, df: pd.DataFrame, role_map: dict[str, str], params: dict[str, Any]) -> MethodResult:
         panel, price_role_used = price_panel(df, role_map)
-        security = params.get("security") or panel.columns[0]
-        if security not in panel.columns:
-            security = panel.columns[0]
-        prices = panel[security].dropna()
+        prices, security = resolve_security_series(panel, params.get("security"))
         if len(prices) < 30:
             raise ValueError(f"Need at least 30 observations for a meaningful VaR estimate (found {len(prices)}).")
 

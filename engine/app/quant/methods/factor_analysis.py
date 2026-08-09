@@ -11,6 +11,7 @@ from app.data.reshape import ReshapeError, extract_series, price_panel
 from app.quant import calc
 from app.quant.base import MethodResult, ParamSpec, QuantMethod, RequiredInput
 from app.quant.chart_theme import apply_theme
+from app.quant.portfolio import resolve_security_series
 
 
 class FactorAnalysisMethod(QuantMethod):
@@ -73,16 +74,14 @@ class FactorAnalysisMethod(QuantMethod):
 
     def calculate(self, df: pd.DataFrame, role_map: dict[str, str], params: dict[str, Any]) -> MethodResult:
         panel, price_role_used = price_panel(df, role_map)
-        security = params.get("security") or panel.columns[0]
-        if security not in panel.columns:
-            security = panel.columns[0]
+        prices, security = resolve_security_series(panel, params.get("security"))
 
         try:
             benchmark_prices = extract_series(df, role_map, "benchmark")
         except ReshapeError as exc:
             raise ValueError("Could not read the mapped Benchmark series.") from exc
 
-        sec_returns = calc.simple_returns(panel[security].dropna())
+        sec_returns = calc.simple_returns(prices)
         bench_returns = calc.simple_returns(benchmark_prices.dropna())
         aligned = pd.concat([sec_returns.rename("security"), bench_returns.rename("market")], axis=1).dropna()
         if len(aligned) < 30:

@@ -19,24 +19,34 @@ import ExampleMethodCard from "@/components/examples/ExampleMethodCard";
 // with the holdings.
 const ROLE_OVERRIDES = { "SPTR Index": "benchmark" };
 
-// One curated parameter set per registered method, tuned against real,
-// liquid, well-known names from the portfolio so every method in the library
-// has a working, representative showcase.
+// Must match app/quant/portfolio.py's PORTFOLIO_LABEL exactly — selecting
+// this value tells any single-security method to analyze an equal-weight,
+// daily-rebalanced blend of every mapped holding instead of one stock.
+const WHOLE_PORTFOLIO = "◆ Whole Portfolio (all holdings, equal-weight, daily-rebalanced)";
+
+// One curated parameter set per registered method. Every method that can
+// meaningfully run on either one security or the whole portfolio defaults
+// to the whole portfolio here — this page is meant to demonstrate portfolio
+// analysis, not single-stock analysis. The exceptions are structural:
+// pairs_trading needs exactly two distinct securities by definition, and
+// performance_dashboard / correlation_analysis / efficient_frontier /
+// hrp_allocation / stress_testing already operate across every holding at
+// once with no "security" selector to begin with.
 const METHOD_PARAMS: Record<string, Record<string, unknown>> = {
-  returns_descriptive: { security: "AAPL" },
-  ewma_crossover: { security: "AAPL" },
-  rolling_zscore: { security: "AAPL" },
+  returns_descriptive: { security: WHOLE_PORTFOLIO },
+  ewma_crossover: { security: WHOLE_PORTFOLIO },
+  rolling_zscore: { security: WHOLE_PORTFOLIO },
   performance_dashboard: {},
-  monte_carlo_gbm: { security: "AAPL", n_sims: 800 },
+  monte_carlo_gbm: { security: WHOLE_PORTFOLIO, n_sims: 800 },
   efficient_frontier: { n_random_portfolios: 1500 },
   correlation_analysis: {},
-  var_cvar: { security: "AAPL" },
+  var_cvar: { security: WHOLE_PORTFOLIO },
   stress_testing: { scenario: "custom_uniform", shock_pct: -20 },
-  mean_reversion_backtest: { security: "GLD" },
-  factor_analysis: { security: "AAPL" },
+  mean_reversion_backtest: { security: WHOLE_PORTFOLIO },
+  factor_analysis: { security: WHOLE_PORTFOLIO },
   pairs_trading: { security_a: "MSFT", security_b: "GOOG" },
-  garch_volatility: { security: "AAPL", forecast_days: 10 },
-  regime_analysis: { security: "AAPL" },
+  garch_volatility: { security: WHOLE_PORTFOLIO, forecast_days: 10 },
+  regime_analysis: { security: WHOLE_PORTFOLIO },
   hrp_allocation: {},
 };
 
@@ -89,8 +99,9 @@ export default function ExamplesPage() {
       <p className="text-slate-400 mb-8 max-w-3xl">
         Every chart below is calculated live by the same Python quant engine your own uploads run through —
         using this portfolio&apos;s actual holdings (82 real securities, real daily closing prices) as the example
-        dataset. Click &quot;What is this?&quot; on any card for the methodology, required data, assumptions, and
-        limitations.
+        dataset. Every method below that can run on the portfolio as a whole (rather than one stock) does —
+        an equal-weight, daily-rebalanced blend of all 82 holdings, not a single ticker. Click &quot;What is
+        this?&quot; on any card for the methodology, required data, assumptions, and limitations.
       </p>
 
       {error && (

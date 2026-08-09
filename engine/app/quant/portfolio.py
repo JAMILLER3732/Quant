@@ -24,6 +24,67 @@ def mean_returns_and_cov(returns: pd.DataFrame) -> tuple[pd.Series, pd.DataFrame
     return clean.mean(), clean.cov()
 
 
+# Sentinel selectable from every single-security "security" dropdown (via
+# check_requirements' dynamic_param_options) that means "analyze the whole
+# portfolio, not one holding." Deliberately a display-ready string (not an
+# opaque id) since the frontend renders dropdown options verbatim.
+PORTFOLIO_LABEL = "◆ Whole Portfolio (all holdings, equal-weight, daily-rebalanced)"
+
+
+def blended_portfolio_series(panel: pd.DataFrame, weights: dict[str, float] | None = None) -> pd.Series:
+    """
+    Collapse a wide multi-security price panel into one blended portfolio
+    price series, for feeding into single-series methods (returns/VaR/GARCH/
+    regime/etc.) so they can analyze "the portfolio" rather than one holding.
+
+    Methodology: daily simple returns per security -> weighted average return
+    each day (equal-weight by default) -> compounded into an index starting
+    at 100. This is a *daily-rebalanced* blend (the standard, simplest
+    definition of a blended benchmark/index) — it is not a buy-and-hold
+    portfolio of fixed share counts, which would additionally require
+    knowing entry prices/quantities that a plain price panel doesn't carry.
+    Only dates where every included security has a price are used, so the
+    blend is never silently built from a partial/shifting basket.
+    """
+    clean = panel.dropna(how="any")
+    if clean.shape[0] < 2:
+        raise ValueError(
+            "Not enough overlapping dates across all securities to build a blended portfolio series "
+            f"(found {clean.shape[0]})."
+        )
+    securities = list(clean.columns)
+    if weights is None:
+        w = pd.Series(1.0 / len(securities), index=securities)
+    else:
+        w = pd.Series({s: weights.get(s, 0.0) for s in securities})
+        total = w.sum()
+        w = w / total if total > 0 else pd.Series(1.0 / len(securities), index=securities)
+
+    security_returns = clean.pct_change().dropna(how="all")
+    portfolio_returns = (security_returns * w).sum(axis=1)
+    index_series = 100.0 * (1.0 + portfolio_returns).cumprod()
+    index_series.name = "Portfolio"
+    return index_series
+
+
+def resolve_security_series(
+    panel: pd.DataFrame, selection: str | None, weights: dict[str, float] | None = None
+) -> tuple[pd.Series, str]:
+    """
+    Resolve a "security" param value to a price series + display name: either
+    one column of the panel, or (if `selection` is the PORTFOLIO_LABEL
+    sentinel, missing, or not an actual column and more than one security is
+    available) the blended whole-portfolio series.
+    """
+    if selection in panel.columns:
+        return panel[selection].dropna(), str(selection)
+    if panel.shape[1] >= 2:
+        return blended_portfolio_series(panel, weights), "Portfolio"
+    # single-security panel with no valid selection — just use the one column
+    only = panel.columns[0]
+    return panel[only].dropna(), str(only)
+
+
 def portfolio_return(weights: np.ndarray, mean_returns: pd.Series, periods_per_year: int = TRADING_DAYS_PER_YEAR) -> float:
     return float(np.dot(weights, mean_returns) * periods_per_year)
 
