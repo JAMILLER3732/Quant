@@ -1,0 +1,18 @@
+# Node / Next.js
+web/node_modules/
+web/.next/
+web/out/
+web/.env*.local
+web/next-env.d.ts
+
+# Python / FastAPI
+engine/.venv/
+engine/__pycache__/
+engine/**/__pycache__/
+engine/.pytest_cache/
+engine/*.egg-info/
+engine/.env
+
+# OS / editor
+.DS_Store
+*.log

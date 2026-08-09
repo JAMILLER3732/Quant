@@ -1,0 +1,14 @@
+# Render "Blueprint" — connect this repo in the Render dashboard and it will
+# auto-detect this file (root: engine/) or you can point a Web Service at
+# this directory manually and skip the blueprint. See root README for steps.
+services:
+  - type: web
+    name: quant-engine
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    envVars:
+      - key: ALLOWED_ORIGINS
+        value: "http://localhost:3000"  # replace with your deployed Vercel URL(s), comma-separated
+    healthCheckPath: /api/health
