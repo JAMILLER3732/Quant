@@ -91,14 +91,29 @@ class CorrelationAnalysisMethod(QuantMethod):
         corr = returns.corr(method=method)
         cov = returns.cov()
 
+        # Per-cell numeric labels and 60px-per-row heights work for a handful of
+        # securities but become unreadable clutter (and a runaway page height —
+        # 60px * 82 securities is ~5000px) on a real multi-dozen-security
+        # portfolio. Past a size threshold, drop the cell text (exact values
+        # are still one hover away) and cap the height so the matrix stays
+        # scannable instead of ballooning; tick labels shrink and rotate so
+        # they stop colliding with each other along the x-axis.
+        n = len(securities)
+        dense = n > 25
         heatmap = go.Figure(data=go.Heatmap(
             z=corr.values, x=list(corr.columns), y=list(corr.index),
             colorscale="RdBu", zmid=0, zmin=-1, zmax=1,
-            text=np.round(corr.values, 2), texttemplate="%{text}",
+            text=np.round(corr.values, 2),
+            texttemplate=None if dense else "%{text}",
+            hovertemplate="%{x} × %{y}: %{z:.3f}<extra></extra>",
             colorbar=dict(title=f"{method.title()} ρ"),
         ))
         apply_theme(heatmap, preset=params.get("theme", "professional"),
-                    title=f"{method.title()} Correlation Matrix", height=max(360, 60 * len(securities)))
+                    title=f"{method.title()} Correlation Matrix",
+                    subtitle=f"{n} securities — hover any cell for its exact value" if dense else None,
+                    height=min(max(360, 26 * n), 1400) if dense else max(360, 60 * n))
+        heatmap.update_xaxes(tickangle=-45, tickfont=dict(size=max(7, min(12, 480 // max(n, 1)))))
+        heatmap.update_yaxes(tickfont=dict(size=max(7, min(12, 480 // max(n, 1)))))
 
         pair_a = params.get("pair_a") or securities[0]
         pair_b = params.get("pair_b") or (securities[1] if len(securities) > 1 else securities[0])

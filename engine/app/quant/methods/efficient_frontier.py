@@ -148,7 +148,14 @@ class EfficientFrontierMethod(QuantMethod):
                 row[f"w_{sec} (%)"] = round(float(weight) * 100, 2)
             weights_table.append(row)
 
+        # A single near-zero-variance security (e.g. a money-market fund pegged
+        # at $1) makes its Pearson correlation with everything else NaN (0/0),
+        # which would otherwise silently poison this whole-matrix average via
+        # plain .sum() — see the identical issue fixed in correlation_analysis.py.
         corr = returns.corr()
+        n = len(securities)
+        offdiag = corr.values[~np.eye(n, dtype=bool)]
+        valid_offdiag = offdiag[~np.isnan(offdiag)]
         stats = {
             "Securities": ", ".join(securities),
             "Observations Used": len(returns),
@@ -157,7 +164,7 @@ class EfficientFrontierMethod(QuantMethod):
             "Max-Sharpe Portfolio Return (%)": round(max_sharpe_ret * 100, 2),
             "Max-Sharpe Portfolio Volatility (%)": round(max_sharpe_vol * 100, 2),
             "Max-Sharpe Ratio": round((max_sharpe_ret - rf) / max_sharpe_vol, 2) if max_sharpe_vol else None,
-            "Average Pairwise Correlation": round(float((corr.values.sum() - len(securities)) / (len(securities) ** 2 - len(securities))), 3),
+            "Average Pairwise Correlation": round(float(valid_offdiag.mean()), 3) if len(valid_offdiag) else None,
         }
 
         return MethodResult(

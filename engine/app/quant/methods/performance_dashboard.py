@@ -70,7 +70,7 @@ class PerformanceDashboardMethod(QuantMethod):
         confidence = float(params.get("var_confidence", 95.0)) / 100.0
 
         rows = []
-        equity_fig = go.Figure()
+        equity_by_security: dict[str, pd.Series] = {}
         scatter_x, scatter_y, scatter_labels = [], [], []
 
         for security in panel.columns:
@@ -99,7 +99,7 @@ class PerformanceDashboardMethod(QuantMethod):
                 "Observations": len(returns),
             })
 
-            equity_fig.add_trace(go.Scatter(x=equity.index, y=equity.values, name=security, mode="lines"))
+            equity_by_security[security] = equity
             scatter_x.append(vol * 100)
             scatter_y.append(cagr * 100)
             scatter_labels.append(security)
@@ -107,14 +107,60 @@ class PerformanceDashboardMethod(QuantMethod):
         if not rows:
             raise ValueError("None of the mapped securities have enough observations (need at least 10) to compute performance statistics.")
 
+        # With more than a handful of securities, a legend entry (and a static
+        # text label on the scatter) per line becomes an unreadable overlapping
+        # wall of text — and with only 8 palette colors, most lines would share
+        # a color anyway, making the legend actively misleading past 8 series.
+        # Past MAX_HIGHLIGHTED securities, draw every line but only name and
+        # color the best/worst performers by Sharpe; the rest render as thin,
+        # muted, unlabeled context lines (still fully visible, still hoverable
+        # by name) — the complete numbers for every security remain in the
+        # ranking table below regardless.
+        MAX_HIGHLIGHTED = 8
+        many_securities = len(rows) > MAX_HIGHLIGHTED
+        highlighted: set[str] = set()
+        if many_securities:
+            by_sharpe = sorted(rows, key=lambda r: (r["Sharpe"] if r["Sharpe"] == r["Sharpe"] else -999), reverse=True)
+            n_top = min(5, len(by_sharpe))
+            n_bottom = min(3, len(by_sharpe) - n_top)
+            highlighted = {r["Security"] for r in by_sharpe[:n_top]} | {r["Security"] for r in by_sharpe[-n_bottom:] if n_bottom > 0}
+
+        equity_fig = go.Figure()
+        for security, equity in equity_by_security.items():
+            if many_securities and security not in highlighted:
+                equity_fig.add_trace(go.Scatter(
+                    x=equity.index, y=equity.values, mode="lines", name=security,
+                    line=dict(width=1, color="#9ca3af"), opacity=0.35, showlegend=False,
+                    hovertemplate=f"{security}: %{{y:.2f}}<extra></extra>",
+                ))
+        for security, equity in equity_by_security.items():
+            if not many_securities or security in highlighted:
+                equity_fig.add_trace(go.Scatter(
+                    x=equity.index, y=equity.values, mode="lines", name=security,
+                    line=dict(width=2.2), hovertemplate=f"{security}: %{{y:.2f}}<extra></extra>",
+                ))
+        title = "Growth of $1 — All Securities"
+        subtitle = (
+            f"{len(rows)} securities — legend highlights the {len(highlighted)} best/worst by Sharpe; "
+            "hover any line to identify it; full ranking in the table below"
+        ) if many_securities else None
         apply_theme(equity_fig, preset=params.get("theme", "professional"),
-                    title="Growth of $1 — All Securities", x_title="Date", y_title="Portfolio Value ($)")
+                    title=title, subtitle=subtitle, x_title="Date", y_title="Portfolio Value ($)",
+                    height=520 if many_securities else 480)
+        if many_securities:
+            equity_fig.update_layout(margin=dict(l=60, r=30, t=95, b=50))
 
         scatter_fig = go.Figure()
-        scatter_fig.add_trace(go.Scatter(x=scatter_x, y=scatter_y, mode="markers+text", text=scatter_labels,
-                                          textposition="top center", marker=dict(size=12)))
+        label_text = [s if (not many_securities or s in highlighted) else "" for s in scatter_labels]
+        scatter_fig.add_trace(go.Scatter(
+            x=scatter_x, y=scatter_y, mode="markers+text" if any(label_text) else "markers",
+            text=label_text, textposition="top center",
+            hovertext=scatter_labels, hovertemplate="%{hovertext}<br>Vol %{x:.1f}% / CAGR %{y:.1f}%<extra></extra>",
+            marker=dict(size=10 if many_securities else 12),
+        ))
         apply_theme(scatter_fig, preset=params.get("theme", "professional"),
-                    title="Risk / Return", x_title="Annualized Volatility (%)", y_title="CAGR (%)", height=420)
+                    title="Risk / Return", subtitle=("Labeled points are the best/worst by Sharpe; hover any point to identify it" if many_securities else None),
+                    x_title="Annualized Volatility (%)", y_title="CAGR (%)", height=420)
 
         ranking = sorted(rows, key=lambda r: (r["Sharpe"] if r["Sharpe"] == r["Sharpe"] else -999), reverse=True)
         best = ranking[0]

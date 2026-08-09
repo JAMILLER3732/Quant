@@ -10,33 +10,33 @@ import {
 } from "@/lib/api";
 import ExampleMethodCard from "@/components/examples/ExampleMethodCard";
 
-const ROLE_MAP = {
-  Date: "date",
-  EXMP_TECH: "close",
-  EXMP_STAPLE: "close",
-  EXMP_ENERGY: "close",
-  EXMP_HEALTH: "close",
-  EXMP_BENCHMARK: "benchmark",
-};
+// The example dataset is the actual portfolio holdings provided for this
+// project — 82 real securities, real ticker symbols, real daily closing
+// prices (2025) — not placeholder/synthetic data. "SPTR Index" is the one
+// column worth overriding after upload: it's a benchmark index level, not a
+// tradeable security, so the generic wide-format auto-mapper (which correctly
+// defaults unlabelled numeric columns to "close") would otherwise lump it in
+// with the holdings.
+const ROLE_OVERRIDES = { "SPTR Index": "benchmark" };
 
-// One curated parameter set per registered method, tuned against the bundled
-// synthetic example dataset (5 securities, ~3 years of daily data) so every
-// method in the library has a working, representative showcase.
+// One curated parameter set per registered method, tuned against real,
+// liquid, well-known names from the portfolio so every method in the library
+// has a working, representative showcase.
 const METHOD_PARAMS: Record<string, Record<string, unknown>> = {
-  returns_descriptive: { security: "EXMP_TECH" },
-  ewma_crossover: { security: "EXMP_TECH" },
-  rolling_zscore: { security: "EXMP_TECH" },
+  returns_descriptive: { security: "AAPL" },
+  ewma_crossover: { security: "AAPL" },
+  rolling_zscore: { security: "AAPL" },
   performance_dashboard: {},
-  monte_carlo_gbm: { security: "EXMP_TECH", n_sims: 800 },
+  monte_carlo_gbm: { security: "AAPL", n_sims: 800 },
   efficient_frontier: { n_random_portfolios: 1500 },
   correlation_analysis: {},
-  var_cvar: { security: "EXMP_TECH" },
+  var_cvar: { security: "AAPL" },
   stress_testing: { scenario: "custom_uniform", shock_pct: -20 },
-  mean_reversion_backtest: { security: "EXMP_STAPLE" },
-  factor_analysis: { security: "EXMP_TECH" },
-  pairs_trading: { security_a: "EXMP_STAPLE", security_b: "EXMP_HEALTH" },
-  garch_volatility: { security: "EXMP_TECH", forecast_days: 10 },
-  regime_analysis: { security: "EXMP_TECH" },
+  mean_reversion_backtest: { security: "GLD" },
+  factor_analysis: { security: "AAPL" },
+  pairs_trading: { security_a: "MSFT", security_b: "GOOG" },
+  garch_volatility: { security: "AAPL", forecast_days: 10 },
+  regime_analysis: { security: "AAPL" },
   hrp_allocation: {},
 };
 
@@ -50,17 +50,19 @@ export default function ExamplesPage() {
     let cancelled = false;
     (async () => {
       try {
-        setStatus("Fetching example data…");
-        const csvRes = await fetch("/examples/sample_portfolio.csv");
+        setStatus("Fetching portfolio data…");
+        const csvRes = await fetch("/examples/portfolio_holdings.csv");
         const blob = await csvRes.blob();
-        const file = new File([blob], "sample_portfolio.csv", { type: "text/csv" });
+        const file = new File([blob], "portfolio_holdings.csv", { type: "text/csv" });
 
         setStatus("Uploading & validating…");
         const upload = await uploadDataset(file);
         if (cancelled) return;
 
+        // The wide-format auto-mapper already resolved every ticker column to
+        // "close" — only the benchmark index column needs overriding.
         setStatus("Mapping columns…");
-        await updateMapping(upload.dataset_id, ROLE_MAP);
+        await updateMapping(upload.dataset_id, { ...upload.role_map, ...ROLE_OVERRIDES });
         if (cancelled) return;
 
         setStatus("Loading method library…");
@@ -86,9 +88,9 @@ export default function ExamplesPage() {
       </h1>
       <p className="text-slate-400 mb-8 max-w-3xl">
         Every chart below is calculated live by the same Python quant engine your own uploads run through —
-        using a bundled <strong>synthetic</strong> 5-security example dataset (clearly-labeled placeholder
-        tickers, ~3 years of simulated daily prices), not real market data. Click &quot;What is this?&quot; on
-        any card for the methodology, required data, assumptions, and limitations.
+        using this portfolio&apos;s actual holdings (82 real securities, real daily closing prices) as the example
+        dataset. Click &quot;What is this?&quot; on any card for the methodology, required data, assumptions, and
+        limitations.
       </p>
 
       {error && (

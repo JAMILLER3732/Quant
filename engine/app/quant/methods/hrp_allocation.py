@@ -86,6 +86,31 @@ class HrpAllocationMethod(QuantMethod):
         if len(returns) < 30:
             raise ValueError(f"Only {len(returns)} overlapping observations — need at least 30.")
 
+        # HRP clusters assets by correlation-distance, which requires dividing
+        # by each asset's standard deviation. A near-zero-variance security
+        # (e.g. a money-market fund pegged at $1) makes that division blow up
+        # into NaN/Inf, which scipy's linkage() rejects outright ("condensed
+        # distance matrix must contain only finite values") — crashing the
+        # whole calculation for every other, perfectly clusterable, security.
+        # It also has no meaningful risk to balance against its peers, so
+        # exclude it rather than let it break the run.
+        std = returns.std(ddof=1)
+        zero_variance = [s for s in securities if not np.isfinite(std[s]) or std[s] < 1e-12]
+        dropped_warning = []
+        if zero_variance:
+            if len(securities) - len(zero_variance) < 2:
+                raise ValueError(
+                    f"{', '.join(zero_variance)} had ~zero return variance (e.g. a money-market fund pegged near "
+                    "$1) and can't be clustered — too few remaining securities for HRP after excluding them."
+                )
+            dropped_warning.append(
+                f"{', '.join(zero_variance)} had ~zero return variance over the overlapping window (e.g. a "
+                "money-market fund pegged near $1.00) and can't be meaningfully correlation-clustered — excluded "
+                "from the HRP allocation."
+            )
+            securities = [s for s in securities if s not in zero_variance]
+            returns = returns[securities]
+
         weights = hrp_weights(returns)
         mean_ret, cov = mean_returns_and_cov(returns)
         rf = float(params.get("risk_free_rate", 0.0)) / 100.0
@@ -124,10 +149,14 @@ class HrpAllocationMethod(QuantMethod):
 
         rows = [{"security": sec, "weight_pct": round(float(weights[sec]) * 100, 3)} for sec in securities]
 
+        warnings = dropped_warning[:]
+        if price_role_used == "close":
+            warnings.append("Using unadjusted Close prices for at least one security.")
+
         return MethodResult(
             figure=self.fig_to_dict(weights_fig),
             stats=stats,
             tables={"dendrogram": self.fig_to_dict(dendro_fig)},
             series_csv_rows=rows,
-            warnings=(["Using unadjusted Close prices for at least one security."] if price_role_used == "close" else []),
+            warnings=warnings,
         )
