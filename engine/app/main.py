@@ -6,11 +6,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
+from app.version import VERSION
 
 app = FastAPI(
     title="Quant Engine API",
     description="Python quantitative-finance calculation engine: upload -> validate -> calculate -> chart.",
-    version="0.1.0",
+    version=VERSION,
 )
 
 allowed_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",")

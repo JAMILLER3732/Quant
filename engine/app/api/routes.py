@@ -13,9 +13,10 @@ from app.data.column_detection import guess_columns, guess_structure
 from app.data.ingestion import IngestionError, ingest_file
 from app.data.reshape import ReshapeError, price_panel
 from app.data.validation import run_validation
-from app.quant.registry import get_method, list_methods
+from app.quant.registry import REGISTRY, get_method, list_methods
 from app.schemas import CalculateRequest, MappingUpdateRequest
 from app.store import STORE
+from app.version import VERSION
 
 router = APIRouter(prefix="/api")
 
@@ -59,7 +60,7 @@ def _df_preview(df: pd.DataFrame, n: int = PREVIEW_ROWS) -> list[dict[str, Any]]
 
 @router.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "version": VERSION, "methods": str(len(REGISTRY))}
 
 
 @router.post("/upload")
