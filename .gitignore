@@ -16,3 +16,5 @@ engine/.env
 # OS / editor
 .DS_Store
 *.log
+.vercel
+.env*
