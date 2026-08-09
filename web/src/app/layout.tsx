@@ -39,6 +39,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <Link href="/lab" className="hover:text-white transition-colors">
                 Quant Lab
               </Link>
+              <Link href="/blog" className="hover:text-white transition-colors">
+                Insights
+              </Link>
+              <Link href="/admin" className="hover:text-white transition-colors text-slate-500">
+                Admin
+              </Link>
             </nav>
           </div>
         </header>

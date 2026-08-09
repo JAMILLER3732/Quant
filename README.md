@@ -4,14 +4,16 @@ A quantitative-finance portfolio analytics platform: upload Excel/CSV data, pick
 quant methodology, and get a chart + statistics calculated by a real, tested Python
 engine — not fabricated numbers.
 
-> **Status: Phase 1 + Phase 2 + Phase 3 complete and deployed.** Upload →
-> validate → map columns → select method → calculate → chart → stats →
-> export, for 15 methods spanning descriptive stats, technical/backtesting,
-> risk, simulation, portfolio optimization, factor models, and econometrics.
+> **Status: Phase 1 + Phase 2 + Phase 3 + partial Phase 4 complete and deployed.**
+> Upload → validate → map columns → select method → calculate → chart →
+> stats → export, for 15 methods spanning descriptive stats,
+> technical/backtesting, risk, simulation, portfolio optimization, factor
+> models, and econometrics — plus an admin-authored blog/research-notes CMS.
 > See [Roadmap](#roadmap) for what's next.
 >
 > - **Live app:** https://project-v0ezh.vercel.app
 > - **Live API:** https://quant-qbh3.onrender.com (interactive docs at `/docs`)
+> - **Blog:** https://project-v0ezh.vercel.app/blog · **Admin:** /admin
 
 ## Architecture
 
@@ -176,7 +178,26 @@ this way nothing has to be re-architected in Phase 2.
 - **Phase 3, not yet done:** multi-factor (Fama-French) models, Brinson
   attribution (needs portfolio+benchmark holdings/weights data this platform
   doesn't yet collect), ARIMA/SARIMA/VAR forecasting, Black-Litterman.
-- **Phase 4:** research library, blog/CMS, admin panel, PDF report generation,
-  user accounts.
+- **Phase 4 (partial):** admin-authored blog/CMS — done (Postgres-backed
+  posts, single-admin password auth via signed session cookie, tabbed
+  Content/Preview/Details editor at `/admin`, public listing at `/blog`).
+  Not yet done: external research-paper library (needs a decision on which
+  APIs/feeds — arXiv, SSRN, etc. — and their terms), multi-admin/user
+  accounts, PDF report generation for Quant Lab analyses.
 
 See the original product spec for full detail on each phase.
+
+## Blog / CMS (Phase 4)
+
+- Public pages: `/blog` (published posts, newest first), `/blog/[slug]`.
+- Admin: `/admin` (redirects to `/admin/login` if not authenticated).
+  Single-admin auth via the `ADMIN_PASSWORD` environment variable — no
+  separate user database. Session is a signed JWT (via `jose`, signing key
+  derived from `ADMIN_PASSWORD`) in an httpOnly cookie, checked by
+  `src/proxy.ts` (Next.js 16's Proxy, formerly Middleware) for page routes
+  and by `requireAdmin()` for API routes.
+- Data layer: `src/lib/db/posts.ts` against a `posts` table (see
+  `src/lib/db/schema.sql`), any standard Postgres connection string via the
+  `postgres` package — works with Neon, Supabase, or otherwise.
+- Local setup: add `POSTGRES_URL` and `ADMIN_PASSWORD` to `web/.env.local`,
+  then `npm run db:migrate` once to create the schema.
