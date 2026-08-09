@@ -4,9 +4,10 @@ A quantitative-finance portfolio analytics platform: upload Excel/CSV data, pick
 quant methodology, and get a chart + statistics calculated by a real, tested Python
 engine — not fabricated numbers.
 
-> **Status: Phase 1 (foundation) complete.** Upload → validate → map columns →
-> select method → calculate → chart → stats → export, for 4 methods. See
-> [Roadmap](#roadmap) for what's next.
+> **Status: Phase 1 + Phase 2 complete.** Upload → validate → map columns →
+> select method → calculate → chart → stats → export, for 10 methods spanning
+> descriptive stats, technical/backtesting, risk, simulation, and portfolio
+> optimization. See [Roadmap](#roadmap) for what's next.
 
 ## Architecture
 
@@ -57,7 +58,7 @@ lib/roles.ts                column-role list (mirrors engine's ROLES)
 lib/csv.ts                  client-side CSV export helper
 ```
 
-## Implemented methods (Phase 1)
+## Implemented methods
 
 | Method | Category | What it does |
 |---|---|---|
@@ -65,9 +66,17 @@ lib/csv.ts                  client-side CSV export helper
 | Rolling Z-Score & Std-Dev Bands | Returns & Descriptive Statistics | Rolling mean/stdev price bands + rolling Z-score of returns |
 | EWMA Crossover Strategy | Technical / Time-Series | Fast/slow EWMA crossover signal, backtested vs. buy-and-hold, with costs |
 | Performance & Risk Dashboard | Risk Analytics | Sharpe/Sortino/Calmar/MaxDD/VaR/CVaR ranking across all mapped securities |
+| Monte Carlo Simulation (GBM) | Simulation | Vectorized geometric Brownian motion, percentile bands, terminal distribution |
+| Efficient Frontier & Optimization | Portfolio Optimization | Random-portfolio cloud + SciPy-optimized min-vol/max-Sharpe portfolios and frontier |
+| Correlation & Covariance Analysis | Correlation & Dependence | Pearson/Spearman/Kendall matrix heatmap + rolling pairwise correlation |
+| Value at Risk & Expected Shortfall | Risk Analytics | Historical, parametric, and Monte Carlo VaR/CVaR compared side by side |
+| Stress Testing & Scenario Analysis | Tail Risk & Stress Testing | Custom or historical-benchmark (beta-scaled) shocks, portfolio P&L breakdown |
+| Mean-Reversion Z-Score Backtest | Backtesting | Rule-based long/short backtest with stop-loss/take-profit, no look-ahead |
 
-All formulas live in `engine/app/quant/calc.py` and are unit-tested against
-hand-calculated values in `engine/app/tests/test_calc.py`.
+All formulas live in `engine/app/quant/calc.py` (core stats/risk),
+`engine/app/quant/portfolio.py` (portfolio optimization), and
+`engine/app/quant/simulation.py` (Monte Carlo), unit-tested against
+hand-calculated/analytical values in `engine/app/tests/`.
 
 ## Local development
 
@@ -144,9 +153,9 @@ this way nothing has to be re-architected in Phase 2.
 - **Phase 1 (done):** upload → validate → map → select method → calculate →
   chart → stats → export. Returns/stats, EWMA crossover, rolling Z-score,
   performance/risk dashboard.
-- **Phase 2:** Monte Carlo (GBM), efficient frontier / portfolio optimization,
-  correlation analysis, VaR/CVaR as standalone methods, stress testing,
-  backtesting engine.
+- **Phase 2 (done):** Monte Carlo (GBM), efficient frontier / portfolio
+  optimization, correlation analysis, standalone VaR/CVaR, stress testing,
+  rule-based backtesting engine.
 - **Phase 3:** factor analysis (CAPM/Fama-French), Brinson attribution, pairs
   trading, GARCH/ARIMA, regime analysis, HRP, Black-Litterman.
 - **Phase 4:** research library, blog/CMS, admin panel, PDF report generation,
