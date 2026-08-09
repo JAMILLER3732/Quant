@@ -4,11 +4,14 @@ A quantitative-finance portfolio analytics platform: upload Excel/CSV data, pick
 quant methodology, and get a chart + statistics calculated by a real, tested Python
 engine — not fabricated numbers.
 
-> **Status: Phase 1 + Phase 2 + Phase 3 complete.** Upload → validate → map
-> columns → select method → calculate → chart → stats → export, for 15
-> methods spanning descriptive stats, technical/backtesting, risk,
-> simulation, portfolio optimization, factor models, and econometrics.
+> **Status: Phase 1 + Phase 2 + Phase 3 complete and deployed.** Upload →
+> validate → map columns → select method → calculate → chart → stats →
+> export, for 15 methods spanning descriptive stats, technical/backtesting,
+> risk, simulation, portfolio optimization, factor models, and econometrics.
 > See [Roadmap](#roadmap) for what's next.
+>
+> - **Live app:** https://project-v0ezh.vercel.app
+> - **Live API:** https://quant-qbh3.onrender.com (interactive docs at `/docs`)
 
 ## Architecture
 
@@ -144,6 +147,12 @@ git push -u origin main
 3. Add environment variable `NEXT_PUBLIC_API_BASE_URL` = your Render engine
    URL from step 2 (e.g. `https://quant-engine.onrender.com`).
 4. Deploy. Vercel will build/redeploy automatically on every push to `main`.
+5. **Check Settings → General → Framework Preset is "Next.js".** If it's
+   "Other," every route will 404 in production even on a "Ready" build,
+   because Vercel looks for a static `public/` folder instead of running
+   `next build`. `web/vercel.json` pins this (`{"framework": "nextjs"}`) so
+   it shouldn't drift, but it's worth a one-time check the first time you
+   connect a repo to an existing/older Vercel project.
 
 ### Why two services instead of one Vercel deployment?
 
