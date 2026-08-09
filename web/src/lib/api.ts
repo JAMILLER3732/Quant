@@ -178,3 +178,55 @@ export function calculate(datasetId: string, methodId: string, params: Record<st
     body: JSON.stringify({ params }),
   });
 }
+
+export type ReportOptions = {
+  scope: "security" | "portfolio";
+  security?: string;
+  include_optimization?: boolean;
+};
+
+export type ReportPreview = {
+  html: string;
+  title: string;
+  ai_generated: boolean;
+  sections: string[];
+  warnings: string[];
+};
+
+export function getAiStatus() {
+  return request<{ configured: boolean; model: string | null }>("/api/reports/ai-status");
+}
+
+export function previewReport(datasetId: string, options: ReportOptions) {
+  return request<ReportPreview>(`/api/datasets/${datasetId}/report/preview`, {
+    method: "POST",
+    body: JSON.stringify(options),
+  });
+}
+
+export async function downloadReportPdf(datasetId: string, options: ReportOptions, filenameHint: string) {
+  const res = await fetch(`${API_BASE}/api/datasets/${datasetId}/report/pdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(options),
+  });
+  if (!res.ok) {
+    let detail: ApiErrorDetail | string = res.statusText;
+    try {
+      const body = await res.json();
+      detail = body.detail ?? body;
+    } catch {
+      // ignore
+    }
+    throw new ApiError(res.status, detail);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${filenameHint}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

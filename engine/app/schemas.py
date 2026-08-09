@@ -12,3 +12,10 @@ class MappingUpdateRequest(BaseModel):
 class CalculateRequest(BaseModel):
     role_map: dict[str, str] | None = None  # optional override; falls back to session's stored mapping
     params: dict[str, Any] = {}
+
+
+class ReportRequest(BaseModel):
+    role_map: dict[str, str] | None = None
+    scope: str = "portfolio"  # "security" | "portfolio"
+    security: str | None = None
+    include_optimization: bool = False

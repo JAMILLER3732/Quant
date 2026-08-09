@@ -14,7 +14,12 @@ from app.data.ingestion import IngestionError, ingest_file
 from app.data.reshape import ReshapeError, price_panel
 from app.data.validation import run_validation
 from app.quant.registry import REGISTRY, get_method, list_methods
-from app.schemas import CalculateRequest, MappingUpdateRequest
+from app.reports.ai_client import is_configured as ai_is_configured
+from app.reports.ai_client import model_name as ai_model_name
+from app.reports.builder import build_report_data
+from app.reports.narrative import generate_report_narrative
+from app.reports.pdf import render_report_html, render_report_pdf
+from app.schemas import CalculateRequest, MappingUpdateRequest, ReportRequest
 from app.store import STORE
 from app.version import VERSION
 
@@ -202,3 +207,86 @@ def calculate(dataset_id: str, method_id: str, body: CalculateRequest) -> dict[s
         "notes": result.notes,
         "params_used": body.params,
     })
+
+
+@router.get("/reports/ai-status")
+def report_ai_status() -> dict[str, Any]:
+    return {"configured": ai_is_configured(), "model": ai_model_name() if ai_is_configured() else None}
+
+
+@router.post("/datasets/{dataset_id}/report/preview")
+def report_preview(dataset_id: str, body: ReportRequest) -> Any:
+    try:
+        session = STORE.get(dataset_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+    role_map = body.role_map or session.role_map
+    try:
+        data = build_report_data(session.df, role_map, body.scope, body.security, body.include_optimization)
+    except ReshapeError as exc:
+        raise HTTPException(422, detail={"error": "requirements_not_met", "message": str(exc)}) from exc
+    except ValueError as exc:
+        raise HTTPException(422, detail={"error": "calculation_error", "message": str(exc)}) from exc
+
+    if not data.sections:
+        raise HTTPException(422, detail={
+            "error": "requirements_not_met",
+            "message": "No report sections could be calculated from the current data mapping. "
+                       "Confirm at least one security has a mapped Close/Adjusted Close price.",
+        })
+
+    narrative = generate_report_narrative(data)
+    narrative["model"] = ai_model_name()
+    html_content = render_report_html(data, narrative)
+
+    return json_response({
+        "html": html_content,
+        "title": data.title,
+        "ai_generated": narrative.get("ai_generated") == "true",
+        "sections": [s.method_name for s in data.sections],
+        "warnings": data.warnings,
+    })
+
+
+@router.post("/datasets/{dataset_id}/report/pdf")
+def report_pdf(dataset_id: str, body: ReportRequest):
+    from fastapi import Response
+
+    try:
+        session = STORE.get(dataset_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+    role_map = body.role_map or session.role_map
+    try:
+        data = build_report_data(session.df, role_map, body.scope, body.security, body.include_optimization)
+    except ReshapeError as exc:
+        raise HTTPException(422, detail={"error": "requirements_not_met", "message": str(exc)}) from exc
+    except ValueError as exc:
+        raise HTTPException(422, detail={"error": "calculation_error", "message": str(exc)}) from exc
+
+    if not data.sections:
+        raise HTTPException(422, detail={
+            "error": "requirements_not_met",
+            "message": "No report sections could be calculated from the current data mapping.",
+        })
+
+    narrative = generate_report_narrative(data)
+    narrative["model"] = ai_model_name()
+    try:
+        pdf_bytes = render_report_pdf(data, narrative)
+    except Exception as exc:  # noqa: BLE001 — surface a clear message instead of a bare 500
+        raise HTTPException(500, detail={
+            "error": "pdf_render_error",
+            "message": f"PDF rendering failed: {exc}. The HTML preview endpoint "
+                       "(/report/preview) is unaffected — try that if this persists.",
+        }) from exc
+
+    safe_name = "".join(c if c.isalnum() else "_" for c in data.target)[:40]
+    filename = f"report_{safe_name}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

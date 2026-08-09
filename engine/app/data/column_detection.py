@@ -42,7 +42,7 @@ _NAME_PATTERNS: list[tuple[str, list[str]]] = [
     ("date", [r"^date$", r"^dt$", r"^timestamp$", r"^time$", r"trade_date", r"as_of"]),
     ("ticker", [r"^ticker$", r"^symbol$", r"^security$", r"^asset$", r"^name$", r"^instrument$"]),
     ("adj_close", [r"adj.?close", r"adjusted.?close"]),
-    ("close", [r"^close$", r"^px_last$", r"^price$", r"closing.?price"]),
+    ("close", [r"^close$", r"^price$", r"closing.?price"]),
     ("open", [r"^open$"]),
     ("high", [r"^high$"]),
     ("low", [r"^low$"]),
@@ -83,6 +83,20 @@ def _looks_like_dates(series: pd.Series, sample: int = 50) -> float:
     s = series.dropna()
     if s.empty:
         return 0.0
+
+    # Already-parsed datetime columns (pandas/openpyxl auto-converts real Excel
+    # date cells) are trivially dates.
+    if pd.api.types.is_datetime64_any_dtype(s):
+        return 1.0
+
+    # A raw numeric dtype must NOT be handed to pd.to_datetime: pandas silently
+    # reinterprets bare ints/floats as nanoseconds-since-epoch and "succeeds" on
+    # essentially any numeric column (e.g. an index level like 8647.569 parses
+    # as 1970-01-01 + 8647569ns) — a false positive that misclassified a real
+    # price/index column as a date column against real data in testing.
+    if pd.api.types.is_numeric_dtype(s):
+        return 0.0
+
     s = s.sample(min(sample, len(s)), random_state=0) if len(s) > sample else s
     parsed = pd.to_datetime(s, errors="coerce", format="mixed")
     return float(parsed.notna().mean())
@@ -118,6 +132,13 @@ def guess_columns(df: pd.DataFrame) -> list[ColumnGuess]:
         norm = _normalize(col)
         best_role, best_conf, best_reason = "ignore", 0.0, "no strong match"
 
+        # A column that's almost entirely empty carries no real signal — trust
+        # nothing but an explicit name match for it. Guards against phantom
+        # Excel "used-range" artifact columns (a handful of stray non-null
+        # cells) being confidently misclassified by content-based heuristics.
+        non_null_fraction = df[col].notna().mean() if len(df) else 0.0
+        sparse = non_null_fraction < 0.05
+
         # name-based match first (cheap, high precision)
         for role, patterns in _NAME_PATTERNS:
             if role in used_roles:
@@ -131,8 +152,8 @@ def guess_columns(df: pd.DataFrame) -> list[ColumnGuess]:
                         best_role, best_conf, best_reason = role, conf, f"column name matches /{pat}/"
                     break
 
-        # content-based fallback / corroboration
-        if best_role == "ignore" or best_conf < 0.85:
+        # content-based fallback / corroboration (skipped for near-empty columns)
+        if not sparse and (best_role == "ignore" or best_conf < 0.85):
             date_score = _looks_like_dates(df[col])
             if date_score > 0.85 and "date" not in used_roles:
                 if date_score > best_conf:
@@ -151,7 +172,50 @@ def guess_columns(df: pd.DataFrame) -> list[ColumnGuess]:
         if best_role != "ignore":
             used_roles.add(best_role)
 
+    _apply_wide_format_fallback(df, guesses)
     return guesses
+
+
+def _apply_wide_format_fallback(df: pd.DataFrame, guesses: list[ColumnGuess]) -> None:
+    """Real multi-security portfolio files are commonly "wide": one Date column
+    plus one numeric column per security, headers are just ticker symbols with
+    no "Close"/"Price" in the name (e.g. Date | AAPL | MSFT | ... | AMZN).
+    Per-column name/content matching alone can't tell those apart from other
+    numeric data, so every one of them falls back to "ignore" — on a real
+    80-security file that means manually re-mapping 80 dropdowns by hand.
+
+    Since a wide sheet's *overall shape* (one date column, many unlabelled
+    numeric columns, no ticker column) is itself strong evidence each of those
+    columns is a per-security price series, mutate the still-"ignore" numeric
+    columns in place to "close" (or "returns" if the column names/values look
+    like returns) so the default mapping is usable immediately. This mirrors
+    exactly the condition guess_structure() uses to label the sheet
+    "wide_prices"/"returns_wide" — kept in sync deliberately, not re-derived
+    generically, so the two never disagree about what counts as "wide".
+    """
+    roles = {g.column: g.role for g in guesses}
+    has_date = "date" in roles.values()
+    has_ticker = "ticker" in roles.values()
+    if not has_date or has_ticker:
+        return
+
+    candidates = [
+        g for g in guesses
+        if g.role == "ignore" and df[g.column].notna().mean() >= 0.05 and _looks_numeric(df[g.column]) > 0.9
+    ]
+    if not candidates:
+        return
+
+    returns_like = all(re.search(r"return|_ret$|^ret$", _normalize(g.column)) for g in candidates)
+    inferred_role = "returns" if returns_like else "close"
+    for g in candidates:
+        g.role = inferred_role
+        g.confidence = 0.55
+        g.reason = (
+            "no per-column name/content match, but the sheet is a wide multi-security "
+            f"layout (Date + many unlabelled numeric columns) — defaulted to '{inferred_role}'; "
+            "please verify/correct per column."
+        )
 
 
 def guess_structure(df: pd.DataFrame, column_guesses: list[ColumnGuess]) -> StructureGuess:
@@ -164,8 +228,16 @@ def guess_structure(df: pd.DataFrame, column_guesses: list[ColumnGuess]) -> Stru
     has_returns_named = "returns" in role_set
     has_portfolio_value = "portfolio_value" in role_set
 
+    # Columns still genuinely unresolved ("ignore"), plus columns the wide-format
+    # fallback above already resolved to close/returns — both count as evidence
+    # of a wide multi-security layout. Matched on the fallback's reason marker
+    # rather than re-deriving the condition, so this can never drift out of
+    # sync with what _apply_wide_format_fallback actually did.
+    fallback_marker = "wide multi-security layout"
     numeric_unlabelled = [
-        c for c, r in roles.items() if r == "ignore" and _looks_numeric(df[c]) > 0.9
+        g.column for g in column_guesses
+        if (g.role == "ignore" and _looks_numeric(df[g.column]) > 0.9)
+        or fallback_marker in g.reason
     ]
 
     if has_date and has_portfolio_value:

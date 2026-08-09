@@ -67,7 +67,15 @@ def ingest_file(filename: str, content: bytes, sheet_name: str | None = None) ->
     if df.empty or df.shape[1] == 0:
         raise IngestionError(f"Sheet '{target_sheet}' was parsed but contains no columns/rows.")
 
-    # Drop fully-empty columns/rows commonly left by Excel exports.
+    # Excel exports frequently leave trailing "phantom used-range" columns/rows
+    # that aren't truly empty — they contain only whitespace or a stray
+    # non-breaking space (\xa0) in a handful of cells, a formatting artifact
+    # rather than real data (observed in a real Bloomberg-exported workbook).
+    # Blank those out before the emptiness check, or they survive as a
+    # near-100%-null junk column that downstream heuristics can misclassify.
+    df = df.apply(lambda col: col.map(
+        lambda v: pd.NA if isinstance(v, str) and v.strip(" \xa0\t\n\r") == "" else v
+    ))
     df = df.dropna(axis=1, how="all").dropna(axis=0, how="all")
     df.columns = [str(c).strip() for c in df.columns]
 

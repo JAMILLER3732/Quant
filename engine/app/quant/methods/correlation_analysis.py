@@ -114,22 +114,40 @@ class CorrelationAnalysisMethod(QuantMethod):
                     x_title="Date", y_title="Correlation", height=340)
 
         offdiag = corr.values[~np.eye(len(securities), dtype=bool)]
+        # A single near-zero-variance security (e.g. a money-market fund pegged
+        # at $1.00) makes its correlation with everything else NaN (0/0). Using
+        # plain mean/max/min would let that one security's NaNs silently null
+        # out the summary stats for the *entire* matrix, even when every other
+        # pair is perfectly valid — use nan-aware reducers instead, and name
+        # the offending securities so the user knows why they're excluded.
+        zero_variance = [s for s in securities if returns[s].std(ddof=1) < 1e-12 or not np.isfinite(returns[s].std(ddof=1))]
+        valid_offdiag = offdiag[~np.isnan(offdiag)]
         stats = {
             "Securities": ", ".join(securities),
             "Observations Used": len(returns),
             "Method": method.title(),
-            "Average Pairwise Correlation": round(float(offdiag.mean()), 3),
-            "Max Pairwise Correlation": round(float(offdiag.max()), 3),
-            "Min Pairwise Correlation": round(float(offdiag.min()), 3),
+            "Average Pairwise Correlation": round(float(valid_offdiag.mean()), 3) if len(valid_offdiag) else None,
+            "Max Pairwise Correlation": round(float(valid_offdiag.max()), 3) if len(valid_offdiag) else None,
+            "Min Pairwise Correlation": round(float(valid_offdiag.min()), 3) if len(valid_offdiag) else None,
         }
 
-        corr_rows = [{"security": idx, **{c: round(float(v), 4) for c, v in row.items()}} for idx, row in corr.iterrows()]
-        cov_table = [{"security": idx, **{c: round(float(v), 6) for c, v in row.items()}} for idx, row in cov.iterrows()]
+        corr_rows = [{"security": idx, **{c: round(float(v), 4) if np.isfinite(v) else None for c, v in row.items()}} for idx, row in corr.iterrows()]
+        cov_table = [{"security": idx, **{c: round(float(v), 6) if np.isfinite(v) else None for c, v in row.items()}} for idx, row in cov.iterrows()]
+
+        warnings = []
+        if price_role_used == "close":
+            warnings.append("Using unadjusted Close prices for at least one security.")
+        if zero_variance:
+            warnings.append(
+                f"{', '.join(zero_variance)} had ~zero return variance over the overlapping window "
+                "(e.g. a money-market fund pegged near $1.00) — its correlation with every other security is "
+                "undefined (0/0) and shown as blank in the matrix; excluded from the summary stats above."
+            )
 
         return MethodResult(
             figure=self.fig_to_dict(heatmap),
             stats=stats,
             tables={"rolling_correlation": self.fig_to_dict(roll_fig), "covariance_matrix": cov_table},
             series_csv_rows=corr_rows,
-            warnings=(["Using unadjusted Close prices for at least one security."] if price_role_used == "close" else []),
+            warnings=warnings,
         )

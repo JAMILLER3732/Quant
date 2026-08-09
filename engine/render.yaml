@@ -11,4 +11,13 @@ services:
     envVars:
       - key: ALLOWED_ORIGINS
         value: "http://localhost:3000"  # replace with your deployed Vercel URL(s), comma-separated
+      # Optional — enables AI-written narrative sections in generated reports.
+      # Without these, reports still generate fully (deterministic templated
+      # narrative instead of AI prose) — see app/reports/ai_client.py.
+      # - key: REPORT_AI_API_KEY
+      #   value: "sk-..."
+      # - key: REPORT_AI_BASE_URL
+      #   value: "https://bazaarlink.ai/api/v1"   # omit to call api.anthropic.com directly
+      # - key: REPORT_AI_MODEL
+      #   value: "claude-opus-5"
     healthCheckPath: /api/health

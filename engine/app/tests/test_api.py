@@ -109,10 +109,29 @@ def test_requirements_satisfied_after_mapping(mapped_dataset_id):
     assert set(body["dynamic_param_options"]["security"]) == {"AAPL", "MSFT", "SPY"}
 
 
-def test_requirements_not_satisfied_before_mapping():
+def test_requirements_satisfied_by_wide_format_auto_mapping():
+    # A real multi-security file is typically "wide" — Date + one numeric column
+    # per ticker, with no "Close"/"Price" in the header names at all (just the
+    # tickers themselves). guess_columns() auto-resolves those to role "close"
+    # from the sheet's overall shape, so requirements should already be
+    # satisfied before the user manually maps anything — otherwise a real
+    # 80+-security upload would require remapping every column by hand.
     content = _sample_csv_bytes()
     resp = client.post("/api/upload", files={"file": ("sample.csv", content, "text/csv")})
-    dataset_id = resp.json()["dataset_id"]  # unmapped: AAPL/MSFT are "ignore" by default
+    dataset_id = resp.json()["dataset_id"]
+    assert resp.json()["role_map"]["AAPL"] == "close"
+    assert resp.json()["role_map"]["MSFT"] == "close"
+    req = client.get(f"/api/datasets/{dataset_id}/methods/returns_descriptive/requirements")
+    assert req.status_code == 200
+    assert req.json()["satisfied"] is True
+
+
+def test_requirements_not_satisfied_with_no_price_columns_at_all():
+    df = pd.DataFrame({"Date": pd.bdate_range("2022-01-03", periods=50), "Notes": ["x"] * 50})
+    buf = io.BytesIO()
+    df.to_csv(buf, index=False)
+    resp = client.post("/api/upload", files={"file": ("notes.csv", buf.getvalue(), "text/csv")})
+    dataset_id = resp.json()["dataset_id"]
     req = client.get(f"/api/datasets/{dataset_id}/methods/returns_descriptive/requirements")
     assert req.status_code == 200
     assert req.json()["satisfied"] is False

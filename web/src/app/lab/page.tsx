@@ -22,8 +22,9 @@ import MethodPicker from "@/components/lab/MethodPicker";
 import MethodInfoPanel from "@/components/lab/MethodInfoPanel";
 import ParamsForm from "@/components/lab/ParamsForm";
 import ResultsView from "@/components/lab/ResultsView";
+import ReportPanel from "@/components/lab/ReportPanel";
 
-type Step = "upload" | "map" | "method" | "results";
+type Step = "upload" | "map" | "method" | "results" | "report";
 
 export default function QuantLabPage() {
   const [step, setStep] = useState<Step>("upload");
@@ -40,6 +41,7 @@ export default function QuantLabPage() {
   const [paramValues, setParamValues] = useState<Record<string, unknown>>({});
 
   const [result, setResult] = useState<MethodResult | null>(null);
+  const [reportSecurityOptions, setReportSecurityOptions] = useState<string[]>([]);
 
   const selectedMethod = useMemo(
     () => methods.find((m) => m.id === selectedMethodId) ?? null,
@@ -99,6 +101,20 @@ export default function QuantLabPage() {
     }
   }
 
+  async function openReportStep() {
+    if (!upload) return;
+    setError(null);
+    try {
+      // Reuse a lightweight method's requirements check purely to get the
+      // list of securities the current mapping resolves to.
+      const req = await getRequirements(upload.dataset_id, "returns_descriptive");
+      setReportSecurityOptions(req.dynamic_param_options.security ?? []);
+    } catch {
+      setReportSecurityOptions([]);
+    }
+    setStep("report");
+  }
+
   async function handleCalculate() {
     if (!upload || !selectedMethodId) return;
     setBusy(true);
@@ -150,13 +166,22 @@ export default function QuantLabPage() {
               </h1>
               <p className="text-slate-400 text-sm mt-1">{upload.structure_guess.description}</p>
             </div>
-            <button
-              disabled={quality?.has_blocking_errors}
-              onClick={() => setStep("method")}
-              className="rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 text-sm font-medium text-white transition-colors"
-            >
-              Continue to method selection →
-            </button>
+            <div className="flex gap-2">
+              <button
+                disabled={quality?.has_blocking_errors}
+                onClick={openReportStep}
+                className="rounded-md border border-emerald-600 text-emerald-400 hover:bg-emerald-600/10 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 text-sm font-medium transition-colors"
+              >
+                Generate full report
+              </button>
+              <button
+                disabled={quality?.has_blocking_errors}
+                onClick={() => setStep("method")}
+                className="rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 text-sm font-medium text-white transition-colors"
+              >
+                Continue to method selection →
+              </button>
+            </div>
           </div>
 
           {quality && <QualityReportPanel report={quality} />}
@@ -223,6 +248,13 @@ export default function QuantLabPage() {
         </div>
       )}
 
+      {step === "report" && upload && (
+        <div className="mt-8 space-y-4">
+          <h1 className="text-2xl font-semibold text-slate-100">Analysis Report</h1>
+          <ReportPanel datasetId={upload.dataset_id} securityOptions={reportSecurityOptions} />
+        </div>
+      )}
+
       {step === "results" && result && selectedMethod && (
         <div className="mt-8 space-y-4">
           <div className="flex items-center justify-between">
@@ -259,6 +291,7 @@ function Stepper({
     { id: "map", label: "2. Validate & Map", enabled: hasUpload },
     { id: "method", label: "3. Select Method", enabled: hasUpload },
     { id: "results", label: "4. Results", enabled: hasResult && hasMethod },
+    { id: "report", label: "Full Report", enabled: hasUpload },
   ];
   return (
     <div className="flex flex-wrap gap-2">
