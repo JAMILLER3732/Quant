@@ -4,10 +4,11 @@ A quantitative-finance portfolio analytics platform: upload Excel/CSV data, pick
 quant methodology, and get a chart + statistics calculated by a real, tested Python
 engine — not fabricated numbers.
 
-> **Status: Phase 1 + Phase 2 complete.** Upload → validate → map columns →
-> select method → calculate → chart → stats → export, for 10 methods spanning
-> descriptive stats, technical/backtesting, risk, simulation, and portfolio
-> optimization. See [Roadmap](#roadmap) for what's next.
+> **Status: Phase 1 + Phase 2 + Phase 3 complete.** Upload → validate → map
+> columns → select method → calculate → chart → stats → export, for 15
+> methods spanning descriptive stats, technical/backtesting, risk,
+> simulation, portfolio optimization, factor models, and econometrics.
+> See [Roadmap](#roadmap) for what's next.
 
 ## Architecture
 
@@ -72,9 +73,14 @@ lib/csv.ts                  client-side CSV export helper
 | Value at Risk & Expected Shortfall | Risk Analytics | Historical, parametric, and Monte Carlo VaR/CVaR compared side by side |
 | Stress Testing & Scenario Analysis | Tail Risk & Stress Testing | Custom or historical-benchmark (beta-scaled) shocks, portfolio P&L breakdown |
 | Mean-Reversion Z-Score Backtest | Backtesting | Rule-based long/short backtest with stop-loss/take-profit, no look-ahead |
+| Factor Analysis (CAPM) | Factor Analysis | OLS market-model regression: alpha, beta, R², rolling beta/alpha |
+| Pairs Trading & Cointegration | Pairs Trading / Mean Reversion | Engle-Granger test, hedge ratio, spread Z-score, half-life, backtest |
+| GARCH Volatility Forecasting | Statistical / Econometric | GARCH(p,q) conditional volatility + forward forecast |
+| Volatility & Trend Regime Analysis | Regime Analysis | Rolling-volatility tercile regimes + MA-based bull/bear regimes, per-regime stats |
+| Hierarchical Risk Parity (HRP) | Portfolio Optimization | Correlation-clustering + recursive bisection allocation (no matrix inversion) |
 
 All formulas live in `engine/app/quant/calc.py` (core stats/risk),
-`engine/app/quant/portfolio.py` (portfolio optimization), and
+`engine/app/quant/portfolio.py` (portfolio optimization + HRP), and
 `engine/app/quant/simulation.py` (Monte Carlo), unit-tested against
 hand-calculated/analytical values in `engine/app/tests/`.
 
@@ -156,8 +162,11 @@ this way nothing has to be re-architected in Phase 2.
 - **Phase 2 (done):** Monte Carlo (GBM), efficient frontier / portfolio
   optimization, correlation analysis, standalone VaR/CVaR, stress testing,
   rule-based backtesting engine.
-- **Phase 3:** factor analysis (CAPM/Fama-French), Brinson attribution, pairs
-  trading, GARCH/ARIMA, regime analysis, HRP, Black-Litterman.
+- **Phase 3 (done):** factor analysis (CAPM), pairs trading/cointegration,
+  GARCH volatility forecasting, volatility/trend regime analysis, HRP.
+- **Phase 3, not yet done:** multi-factor (Fama-French) models, Brinson
+  attribution (needs portfolio+benchmark holdings/weights data this platform
+  doesn't yet collect), ARIMA/SARIMA/VAR forecasting, Black-Litterman.
 - **Phase 4:** research library, blog/CMS, admin panel, PDF report generation,
   user accounts.
 

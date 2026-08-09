@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.optimize import minimize
+from scipy.spatial.distance import squareform
 
 from app.quant.calc import TRADING_DAYS_PER_YEAR
 
@@ -109,6 +111,66 @@ def optimize_max_sharpe(mean_returns: pd.Series, cov_matrix: pd.DataFrame, risk_
     if not result.success:
         raise ValueError(f"Maximum-Sharpe optimization did not converge: {result.message}")
     return result.x
+
+
+def hrp_linkage(corr: pd.DataFrame) -> np.ndarray:
+    """Lopez de Prado's correlation-distance: d_ij = sqrt(0.5*(1-corr_ij)), then
+    single-linkage hierarchical clustering on the condensed distance matrix."""
+    dist = np.sqrt(0.5 * (1 - corr.values))
+    np.fill_diagonal(dist, 0.0)
+    condensed = squareform(dist, checks=False)
+    return linkage(condensed, method="single")
+
+
+def hrp_quasi_diag_order(link: np.ndarray, n_assets: int) -> list[int]:
+    """Recover the leaf order (quasi-diagonalization) from a linkage matrix via
+    scipy's own dendrogram leaf-ordering, avoiding a hand-rolled recursive walk."""
+    return dendrogram(link, no_plot=True)["leaves"]
+
+
+def hrp_weights(returns: pd.DataFrame) -> pd.Series:
+    """
+    Hierarchical Risk Parity (Lopez de Prado, 2016):
+      1. Cluster assets by correlation-distance (single linkage).
+      2. Quasi-diagonalize the covariance matrix by the cluster leaf order.
+      3. Recursive bisection: split the ordered list in half repeatably, and at
+         each split allocate inversely proportional to each half's cluster
+         variance (inverse-variance weighting within a cluster), so risk is
+         balanced across the hierarchy rather than across raw asset counts.
+    """
+    cov = returns.cov()
+    corr = returns.corr()
+    assets = list(returns.columns)
+    n = len(assets)
+
+    link = hrp_linkage(corr)
+    order = hrp_quasi_diag_order(link, n)
+    ordered_assets = [assets[i] for i in order]
+
+    weights = pd.Series(1.0, index=ordered_assets)
+    clusters = [ordered_assets]
+
+    def cluster_variance(items: list[str]) -> float:
+        sub_cov = cov.loc[items, items]
+        inv_diag = 1.0 / np.diag(sub_cov.values)
+        ivp = inv_diag / inv_diag.sum()  # inverse-variance weights within the cluster
+        return float(ivp @ sub_cov.values @ ivp)
+
+    while clusters:
+        new_clusters = []
+        for cluster in clusters:
+            if len(cluster) <= 1:
+                continue
+            mid = len(cluster) // 2
+            left, right = cluster[:mid], cluster[mid:]
+            var_left, var_right = cluster_variance(left), cluster_variance(right)
+            alloc_left = 1.0 - var_left / (var_left + var_right)
+            weights[left] *= alloc_left
+            weights[right] *= (1.0 - alloc_left)
+            new_clusters.extend([left, right])
+        clusters = new_clusters
+
+    return weights.reindex(assets)
 
 
 def efficient_frontier(mean_returns: pd.Series, cov_matrix: pd.DataFrame, n_points: int = 40,

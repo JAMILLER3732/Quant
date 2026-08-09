@@ -54,6 +54,26 @@ def mapped_dataset_id() -> str:
     return dataset_id
 
 
+@pytest.fixture()
+def mapped_dataset_id_with_benchmark() -> str:
+    """Same as mapped_dataset_id, but SPY is mapped to 'benchmark' instead of
+    'close', for methods that regress a security against a market factor."""
+    content = _sample_csv_bytes()
+    resp = client.post("/api/upload", files={"file": ("sample.csv", content, "text/csv")})
+    dataset_id = resp.json()["dataset_id"]
+    mapping_resp = client.post(
+        f"/api/datasets/{dataset_id}/mapping",
+        json={"role_map": {"Date": "date", "AAPL": "close", "MSFT": "close", "SPY": "benchmark"}},
+    )
+    assert mapping_resp.status_code == 200, mapping_resp.text
+    return dataset_id
+
+
+# factor_analysis needs a mapped benchmark (see mapped_dataset_id_with_benchmark below)
+# rather than the generic all-close mapping every other method is fine with.
+METHODS_NEEDING_GENERIC_MAPPING = [m for m in REGISTRY.keys() if m != "factor_analysis"]
+
+
 def test_upload_returns_structure_and_quality_report():
     content = _sample_csv_bytes()
     resp = client.post("/api/upload", files={"file": ("sample.csv", content, "text/csv")})
@@ -98,7 +118,7 @@ def test_requirements_not_satisfied_before_mapping():
     assert req.json()["satisfied"] is False
 
 
-@pytest.mark.parametrize("method_id", list(REGISTRY.keys()))
+@pytest.mark.parametrize("method_id", METHODS_NEEDING_GENERIC_MAPPING)
 def test_calculate_every_registered_method_returns_valid_json(mapped_dataset_id, method_id):
     resp = client.post(
         f"/api/datasets/{mapped_dataset_id}/calculate/{method_id}",
@@ -115,6 +135,24 @@ def test_calculate_every_registered_method_returns_valid_json(mapped_dataset_id,
         for axis in ("x", "y"):
             if axis in trace and trace[axis]:
                 assert isinstance(trace[axis][0], (str, int, float, type(None)))
+
+
+def test_factor_analysis_requires_benchmark(mapped_dataset_id):
+    # mapped_dataset_id maps SPY to 'close', not 'benchmark' -> requirements should fail cleanly.
+    req = client.get(f"/api/datasets/{mapped_dataset_id}/methods/factor_analysis/requirements")
+    assert req.status_code == 200
+    assert req.json()["satisfied"] is False
+
+
+def test_factor_analysis_calculates_with_mapped_benchmark(mapped_dataset_id_with_benchmark):
+    resp = client.post(
+        f"/api/datasets/{mapped_dataset_id_with_benchmark}/calculate/factor_analysis",
+        json={"params": {"security": "AAPL"}},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert "Beta" in body["stats"]
+    assert "R-squared" in body["stats"]
 
 
 def test_calculate_unknown_method_404(mapped_dataset_id):

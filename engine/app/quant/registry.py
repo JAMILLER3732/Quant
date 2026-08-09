@@ -11,9 +11,14 @@ from app.quant.base import QuantMethod
 from app.quant.methods.correlation_analysis import CorrelationAnalysisMethod
 from app.quant.methods.efficient_frontier import EfficientFrontierMethod
 from app.quant.methods.ewma_crossover import EwmaCrossoverMethod
+from app.quant.methods.factor_analysis import FactorAnalysisMethod
+from app.quant.methods.garch_volatility import GarchVolatilityMethod
+from app.quant.methods.hrp_allocation import HrpAllocationMethod
 from app.quant.methods.mean_reversion_backtest import MeanReversionBacktestMethod
 from app.quant.methods.monte_carlo_gbm import MonteCarloGbmMethod
+from app.quant.methods.pairs_trading import PairsTradingMethod
 from app.quant.methods.performance_dashboard import PerformanceDashboardMethod
+from app.quant.methods.regime_analysis import RegimeAnalysisMethod
 from app.quant.methods.returns_descriptive import ReturnsDescriptiveMethod
 from app.quant.methods.rolling_zscore import RollingZScoreMethod
 from app.quant.methods.stress_testing import StressTestingMethod
@@ -32,6 +37,12 @@ _METHOD_CLASSES: list[type[QuantMethod]] = [
     VarCvarMethod,
     StressTestingMethod,
     MeanReversionBacktestMethod,
+    # Phase 3
+    FactorAnalysisMethod,
+    PairsTradingMethod,
+    GarchVolatilityMethod,
+    RegimeAnalysisMethod,
+    HrpAllocationMethod,
 ]
 
 REGISTRY: dict[str, QuantMethod] = {cls.id: cls() for cls in _METHOD_CLASSES}
